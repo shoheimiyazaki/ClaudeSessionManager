@@ -172,15 +172,18 @@ public static class WindowHelper
 
     /// <summary>
     /// HWND のタイトルを取得する。
-    /// PseudoConsoleWindow はタイトルが空のため、AttachConsole で取得したコンソールタイトルにフォールバックする。
+    /// FindTerminalAncestor が WindowsTerminal を返す場合は FindWindowByPidWithTitle が WT の
+    /// メインウィンドウ HWND を返すため、GetWindowText がアクティブタブタイトルをリアルタイムで返す。
+    /// タイトルが空のウィンドウ（PseudoConsoleWindow など）は AttachConsole 経由にフォールバック。
     /// WMI クエリを含むため、バックグラウンドスレッドから呼ぶこと。
     /// </summary>
     public static string GetEffectiveTitle(IntPtr hWnd, int claudePid)
     {
+        // WT hwnd の場合は GetWindowText がアクティブタブタイトルを返す
         var title = GetWindowTitle(hWnd);
         if (!string.IsNullOrWhiteSpace(title)) return title;
 
-        // PseudoConsoleWindow などタイトルが空の場合、コンソールタイトルを使う
+        // タイトルが空（PseudoConsoleWindow など）→ AttachConsole 経由で取得
         var (termPid, _) = FindTerminalAncestor(claudePid);
         if (termPid <= 0) return string.Empty;
         return GetConsoleTitleForPid(termPid);
@@ -207,10 +210,17 @@ public static class WindowHelper
 
     // ---- private ----
 
-    /// <summary>claude.exe → 祖先を辿り、最初のターミナルプロセスを返す</summary>
+    /// <summary>
+    /// claude.exe → 祖先を辿り、最適なターミナルプロセスを返す。
+    /// WindowsTerminal を最優先とし、powershell/pwsh の上に WT がある場合は WT を返す。
+    /// WT がなければ powershell/pwsh を返す（スタンドアロン）。
+    /// </summary>
     private static (int pid, string name) FindTerminalAncestor(int claudePid)
     {
         int cur = claudePid;
+        int savedShellPid  = -1;
+        string savedShellName = string.Empty;
+
         for (int depth = 0; depth < 8; depth++)
         {
             int parentPid = GetParentPid(cur);
@@ -219,15 +229,26 @@ public static class WindowHelper
             string parentName = GetProcessName(parentPid);
             if (string.IsNullOrEmpty(parentName)) break;
 
-            if (TerminalNames.Contains(parentName))
+            // WindowsTerminal を見つけたら最優先で返す
+            if (parentName.Equals("WindowsTerminal.exe", StringComparison.OrdinalIgnoreCase))
                 return (parentPid, parentName);
 
-            if (StopNames.Contains(parentName))
-                break;
+            // powershell / pwsh: 記録して上方向に WT を探し続ける
+            if (parentName.Equals("powershell.exe", StringComparison.OrdinalIgnoreCase) ||
+                parentName.Equals("pwsh.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                if (savedShellPid < 0) { savedShellPid = parentPid; savedShellName = parentName; }
+                cur = parentPid;
+                continue;
+            }
+
+            if (StopNames.Contains(parentName)) break;
 
             cur = parentPid;
         }
-        return (-1, string.Empty);
+
+        // WT が見つからなかった → スタンドアロン shell を返す
+        return (savedShellPid, savedShellName);
     }
 
     /// <summary>指定 PID の子プロセスから conhost.exe / OpenConsole.exe を探す</summary>
