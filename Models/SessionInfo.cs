@@ -11,6 +11,7 @@ public class SessionInfo : INotifyPropertyChanged
     private string _windowTitle = string.Empty;
     private IntPtr _windowHandle;
     private DateTime? _lastActivity;
+    private bool _isArchived;
 
     public int Pid { get; init; }
     public string SessionId { get; init; } = string.Empty;
@@ -22,9 +23,7 @@ public class SessionInfo : INotifyPropertyChanged
         get
         {
             var trimmed = ProjectPath.TrimEnd('/', '\\');
-            return string.IsNullOrEmpty(trimmed)
-                ? $"PID:{Pid}"
-                : Path.GetFileName(trimmed);
+            return string.IsNullOrEmpty(trimmed) ? $"PID:{Pid}" : Path.GetFileName(trimmed);
         }
     }
 
@@ -36,11 +35,19 @@ public class SessionInfo : INotifyPropertyChanged
             if (_isAlive == value) return;
             _isAlive = value;
             OnPropertyChanged();
-            OnPropertyChanged(nameof(StatusLabel));
         }
     }
 
-    public string StatusLabel => _isAlive ? "実行中" : "終了";
+    public bool IsArchived
+    {
+        get => _isArchived;
+        set
+        {
+            if (_isArchived == value) return;
+            _isArchived = value;
+            OnPropertyChanged();
+        }
+    }
 
     public string WindowTitle
     {
@@ -64,7 +71,6 @@ public class SessionInfo : INotifyPropertyChanged
         }
     }
 
-    /// <summary>最後のユーザーメッセージ時刻</summary>
     public DateTime? LastActivity
     {
         get => _lastActivity;
@@ -74,36 +80,33 @@ public class SessionInfo : INotifyPropertyChanged
             _lastActivity = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(LastActivityText));
+            OnPropertyChanged(nameof(SortKey));
         }
     }
 
-    /// <summary>最後のメッセージからの経過時間表示（例: 5m前 / 2h前）</summary>
+    /// <summary>ソートキー。LastActivity が null の場合は最下位（DateTime.MinValue）</summary>
+    public DateTime SortKey => LastActivity ?? DateTime.MinValue;
+
     public string LastActivityText
     {
         get
         {
             if (_lastActivity == null) return string.Empty;
             var elapsed = DateTime.Now - _lastActivity.Value;
-            if (elapsed.TotalDays >= 1)
-                return $"{(int)elapsed.TotalDays}d前";
-            if (elapsed.TotalHours >= 1)
-                return $"{(int)elapsed.TotalHours}h{elapsed.Minutes:D2}m前";
-            if (elapsed.TotalMinutes >= 1)
-                return $"{(int)elapsed.TotalMinutes}m前";
+            if (elapsed.TotalDays >= 1)   return $"{(int)elapsed.TotalDays}d前";
+            if (elapsed.TotalHours >= 1)  return $"{(int)elapsed.TotalHours}h{elapsed.Minutes:D2}m前";
+            if (elapsed.TotalMinutes >= 1) return $"{(int)elapsed.TotalMinutes}m前";
             return "今";
         }
     }
 
-    /// <summary>起動からの経過時間（例: 1h05m / 23m）</summary>
     public string ElapsedTime
     {
         get
         {
             var elapsed = DateTime.Now - StartedAt;
-            if (elapsed.TotalHours >= 1)
-                return $"{(int)elapsed.TotalHours}h{elapsed.Minutes:D2}m";
-            if (elapsed.TotalMinutes >= 1)
-                return $"{(int)elapsed.TotalMinutes}m";
+            if (elapsed.TotalHours >= 1)  return $"{(int)elapsed.TotalHours}h{elapsed.Minutes:D2}m";
+            if (elapsed.TotalMinutes >= 1) return $"{(int)elapsed.TotalMinutes}m";
             return "今";
         }
     }

@@ -9,22 +9,61 @@
         Topmost="True"
         ShowInTaskbar="False"
         Width="450"
-        SizeToContent="Height"
+        Height="650"
         ResizeMode="NoResize">
 
     <Window.DataContext>
         <vm:MainViewModel/>
     </Window.DataContext>
 
+    <Window.Resources>
+        <!-- タブボタン共通スタイル（アンダーライン付き） -->
+        <Style x:Key="TabButtonStyle" TargetType="Button">
+            <Setter Property="Background"       Value="Transparent"/>
+            <Setter Property="Foreground"       Value="#45475A"/>
+            <Setter Property="BorderBrush"      Value="Transparent"/>
+            <Setter Property="BorderThickness"  Value="0,0,0,2"/>
+            <Setter Property="Padding"          Value="14,5"/>
+            <Setter Property="FontSize"         Value="11"/>
+            <Setter Property="Cursor"           Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background      ="{TemplateBinding Background}"
+                                BorderBrush    ="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding        ="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="#CDD6F4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
     <!-- ドラッグ移動用: ヘッダー部分だけ DragMove -->
     <Border Background="#E61E1E2E"
             CornerRadius="10"
             x:Name="RootBorder">
 
-        <StackPanel>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
 
             <!-- ===== ヘッダー ===== -->
-            <Border x:Name="DragHandle"
+            <Border Grid.Row="0"
+                    x:Name="DragHandle"
                     Padding="12,8,8,6"
                     Cursor="SizeAll"
                     MouseLeftButtonDown="DragHandle_MouseLeftButtonDown">
@@ -74,111 +113,224 @@
             </Border>
 
             <!-- 区切り線 -->
-            <Rectangle Height="1" Fill="#313244" Margin="8,0"/>
+            <Rectangle Grid.Row="1" Height="1" Fill="#313244" Margin="8,0"/>
 
-            <!-- ===== セッションリスト ===== -->
-            <ItemsControl ItemsSource="{Binding Sessions}"
+            <!-- ===== タブ ===== -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="8,0">
+
+                <!-- アクティブタブ -->
+                <Button Command="{Binding SelectActiveTabCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource TabButtonStyle}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedTab}" Value="0">
+                                    <Setter Property="Foreground"  Value="#CDD6F4"/>
+                                    <Setter Property="BorderBrush" Value="#CBA6F7"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <TextBlock Text="アクティブ" FontSize="11"/>
+                </Button>
+
+                <!-- アーカイブタブ -->
+                <Button Command="{Binding SelectArchivedTabCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource TabButtonStyle}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedTab}" Value="1">
+                                    <Setter Property="Foreground"  Value="#CDD6F4"/>
+                                    <Setter Property="BorderBrush" Value="#CBA6F7"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <TextBlock Text="アーカイブ" FontSize="11"/>
+                </Button>
+
+            </StackPanel>
+
+            <!-- 区切り線 -->
+            <Rectangle Grid.Row="3" Height="1" Fill="#313244" Margin="8,0"/>
+
+            <!-- ===== セッションリスト（スクロール可） ===== -->
+            <ScrollViewer Grid.Row="4"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
                           Margin="0,4,0,6">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Button Background="Transparent"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                HorizontalContentAlignment="Stretch"
-                                Command="{Binding DataContext.FocusWindowCommand,
-                                          RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                CommandParameter="{Binding}">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="RowBg"
-                                            Background="Transparent"
-                                            Padding="12,5,12,5">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="10"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
+                <StackPanel>
 
-                                            <!-- ステータスドット -->
-                                            <Ellipse Grid.Column="0"
-                                                     Width="7" Height="7"
-                                                     VerticalAlignment="Center">
-                                                <Ellipse.Style>
-                                                    <Style TargetType="Ellipse">
-                                                        <Setter Property="Fill" Value="#45475A"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsAlive}" Value="True">
-                                                                <Setter Property="Fill" Value="#A6E3A1"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Ellipse.Style>
-                                            </Ellipse>
+                    <ItemsControl x:Name="SessionList"
+                                  ItemsSource="{Binding CurrentSessions}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Background="Transparent"
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        HorizontalContentAlignment="Stretch"
+                                        Command="{Binding DataContext.FocusOrResumeCommand,
+                                                  RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding}">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="RowBg"
+                                                    Background="Transparent"
+                                                    Padding="12,5,8,5">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="10"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="28"/>
+                                                    </Grid.ColumnDefinitions>
 
-                                            <!-- プロジェクト名 + ウィンドウタイトル -->
-                                            <StackPanel Grid.Column="1"
-                                                        Margin="8,0,8,0"
-                                                        VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding ProjectName}"
-                                                           Foreground="#8cff9d"
-                                                           FontSize="16"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                                <TextBlock Text="{Binding WindowTitle}"
-                                                           Foreground="#a3c8e3"
-                                                           FontSize="14"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           Visibility="{Binding WindowTitle,
-                                                               Converter={StaticResource StringToVisibilityConverter}}"/>
-                                            </StackPanel>
+                                                    <!-- ステータスドット -->
+                                                    <Ellipse Grid.Column="0"
+                                                             Width="7" Height="7"
+                                                             VerticalAlignment="Center">
+                                                        <Ellipse.Style>
+                                                            <Style TargetType="Ellipse">
+                                                                <Setter Property="Fill" Value="#45475A"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsAlive}" Value="True">
+                                                                        <Setter Property="Fill" Value="#A6E3A1"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Ellipse.Style>
+                                                    </Ellipse>
 
-                                            <!-- 右側: 経過時間 + 最終メッセージ -->
-                                            <StackPanel Grid.Column="2"
-                                                        VerticalAlignment="Center"
-                                                        HorizontalAlignment="Right">
-                                                <TextBlock Text="{Binding ElapsedTime}"
-                                                           Foreground="#585B70"
-                                                           FontSize="10"
-                                                           HorizontalAlignment="Right"/>
-                                                <TextBlock Text="{Binding LastActivityText}"
-                                                           Foreground="#A6E3A1"
-                                                           FontSize="10"
-                                                           HorizontalAlignment="Right"
-                                                           Visibility="{Binding LastActivityText,
-                                                               Converter={StaticResource StringToVisibilityConverter}}"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="RowBg" Property="Background" Value="#1ACDD6F4"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
-                        </Button>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                                                    <!-- プロジェクト名 + ウィンドウタイトル -->
+                                                    <StackPanel Grid.Column="1"
+                                                                Margin="8,0,8,0"
+                                                                VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding ProjectName}"
+                                                                   Foreground="#8cff9d"
+                                                                   FontSize="16"
+                                                                   TextTrimming="CharacterEllipsis"/>
+                                                        <TextBlock Text="{Binding WindowTitle}"
+                                                                   Foreground="#a3c8e3"
+                                                                   FontSize="14"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Visibility="{Binding WindowTitle,
+                                                                       Converter={StaticResource StringToVisibilityConverter}}"/>
+                                                    </StackPanel>
 
-            <!-- セッションなし表示 -->
-            <TextBlock Text="セッションなし"
-                       Foreground="#45475A"
-                       FontSize="11"
-                       HorizontalAlignment="Center"
-                       Margin="0,8,0,10">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                        <Setter Property="Visibility" Value="Collapsed"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding Sessions.Count}" Value="0">
-                                <Setter Property="Visibility" Value="Visible"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBlock.Style>
-            </TextBlock>
+                                                    <!-- 右側: 経過時間 + 最終メッセージ -->
+                                                    <StackPanel Grid.Column="2"
+                                                                VerticalAlignment="Center"
+                                                                HorizontalAlignment="Right">
+                                                        <TextBlock Text="{Binding ElapsedTime}"
+                                                                   Foreground="#585B70"
+                                                                   FontSize="10"
+                                                                   HorizontalAlignment="Right"/>
+                                                        <TextBlock Text="{Binding LastActivityText}"
+                                                                   Foreground="#A6E3A1"
+                                                                   FontSize="10"
+                                                                   HorizontalAlignment="Right"
+                                                                   Visibility="{Binding LastActivityText,
+                                                                       Converter={StaticResource StringToVisibilityConverter}}"/>
+                                                    </StackPanel>
 
-        </StackPanel>
+                                                    <!-- アーカイブボタン（非アーカイブ時のみ表示） -->
+                                                    <Button Grid.Column="3"
+                                                            Content="−"
+                                                            FontSize="13"
+                                                            Width="22" Height="22"
+                                                            VerticalAlignment="Center"
+                                                            HorizontalAlignment="Center"
+                                                            BorderThickness="0"
+                                                            Cursor="Hand"
+                                                            ToolTip="アーカイブ"
+                                                            Command="{Binding DataContext.ArchiveCommand,
+                                                                      RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button">
+                                                                <Setter Property="Background" Value="Transparent"/>
+                                                                <Setter Property="Foreground" Value="#45475A"/>
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                <Style.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter Property="Foreground" Value="#A6ADC8"/>
+                                                                    </Trigger>
+                                                                    <DataTrigger Binding="{Binding IsArchived}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
+
+                                                    <!-- 復元ボタン（アーカイブ時のみ表示） -->
+                                                    <Button Grid.Column="3"
+                                                            Content="↩"
+                                                            FontSize="12"
+                                                            Width="22" Height="22"
+                                                            VerticalAlignment="Center"
+                                                            HorizontalAlignment="Center"
+                                                            BorderThickness="0"
+                                                            Cursor="Hand"
+                                                            ToolTip="アーカイブから復元"
+                                                            Command="{Binding DataContext.RestoreCommand,
+                                                                      RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button">
+                                                                <Setter Property="Background" Value="Transparent"/>
+                                                                <Setter Property="Foreground" Value="#45475A"/>
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                <Style.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter Property="Foreground" Value="#A6E3A1"/>
+                                                                    </Trigger>
+                                                                    <DataTrigger Binding="{Binding IsArchived}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
+
+                                                </Grid>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="RowBg" Property="Background" Value="#1ACDD6F4"/>
+                                                </Trigger>
+                                                <!-- 終了済みセッションを半透明表示 -->
+                                                <DataTrigger Binding="{Binding IsAlive}" Value="False">
+                                                    <Setter TargetName="RowBg" Property="Opacity" Value="0.45"/>
+                                                </DataTrigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- セッションなし表示 -->
+                    <TextBlock Text="セッションなし"
+                               Foreground="#45475A"
+                               FontSize="11"
+                               HorizontalAlignment="Center"
+                               Margin="0,8,0,10">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ElementName=SessionList, Path=HasItems}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                </StackPanel>
+            </ScrollViewer>
+
+        </Grid>
     </Border>
 </Window>

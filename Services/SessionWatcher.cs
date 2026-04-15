@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,24 +19,31 @@ public sealed class SessionWatcher : IDisposable
 {
     private readonly string _sessionsDir;
     private readonly string _historyPath;
+    private readonly string _archivedPath;
     private FileSystemWatcher? _fsWatcher;
     private Timer? _refreshTimer;
     private Timer? _elapsedTimer;
 
     private readonly object _lock = new();
     private readonly Dictionary<int, SessionInfo> _byPid = new();
+    private HashSet<string> _archivedIds = new();
 
     public ObservableCollection<SessionInfo> Sessions { get; } = new();
+
+    /// <summary>セッション状態の更新後（ソート/フィルター再評価タイミング）に発火する。</summary>
+    public event Action? DataRefreshed;
 
     public SessionWatcher()
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _sessionsDir  = Path.Combine(home, ".claude", "sessions");
         _historyPath  = Path.Combine(home, ".claude", "history.jsonl");
+        _archivedPath = Path.Combine(home, ".claude", "csm_archived.json");
     }
 
     public void Start()
     {
+        _archivedIds = LoadArchivedIds();
         LoadExistingSessions();
         StartFileWatcher();
 
@@ -82,6 +90,8 @@ public sealed class SessionWatcher : IDisposable
                     ? GetLastActivity(data.SessionId)
                     : null;
 
+                bool isArchived = _archivedIds.Contains(data.SessionId ?? string.Empty);
+
                 var session = new SessionInfo
                 {
                     Pid          = data.Pid,
@@ -92,6 +102,7 @@ public sealed class SessionWatcher : IDisposable
                     WindowHandle = hwnd,
                     WindowTitle  = title,
                     LastActivity = lastActivity,
+                    IsArchived   = isArchived,
                 };
 
                 lock (_lock)
@@ -157,6 +168,8 @@ public sealed class SessionWatcher : IDisposable
                         session.LastActivity = lastActivity;
                 });
             }
+            // すべてのプロパティ更新を Dispatcher にキューした後、ソート/フィルター再評価を要求
+            Application.Current.Dispatcher.BeginInvoke(() => DataRefreshed?.Invoke());
         });
     }
 
@@ -170,7 +183,39 @@ public sealed class SessionWatcher : IDisposable
         {
             foreach (var s in snapshot)
                 s.NotifyTimesChanged();
+            DataRefreshed?.Invoke();
         });
+    }
+
+    // ---- アーカイブ永続化 ----
+
+    private HashSet<string> LoadArchivedIds()
+    {
+        if (!File.Exists(_archivedPath)) return new HashSet<string>();
+        try
+        {
+            var json = File.ReadAllText(_archivedPath);
+            var ids  = JsonSerializer.Deserialize<List<string>>(json);
+            return ids is null ? new HashSet<string>() : new HashSet<string>(ids);
+        }
+        catch { return new HashSet<string>(); }
+    }
+
+    public void SaveArchivedIds()
+    {
+        List<string> ids;
+        lock (_lock)
+        {
+            ids = _byPid.Values
+                .Where(s => s.IsArchived && !string.IsNullOrEmpty(s.SessionId))
+                .Select(s => s.SessionId)
+                .ToList();
+        }
+        try
+        {
+            File.WriteAllText(_archivedPath, JsonSerializer.Serialize(ids));
+        }
+        catch { }
     }
 
     // ---- ヘルパー ----
@@ -183,7 +228,6 @@ public sealed class SessionWatcher : IDisposable
         if (!File.Exists(_historyPath)) return null;
         try
         {
-            // 末尾から最大 2000 行を保持しながら読む
             var tail = new Queue<string>(2000);
             using var fs = new FileStream(_historyPath,
                 FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -195,9 +239,8 @@ public sealed class SessionWatcher : IDisposable
                 if (tail.Count > 2000) tail.Dequeue();
             }
 
-            // 末尾から sessionId を探す
             var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            foreach (var l in System.Linq.Enumerable.Reverse(tail))
+            foreach (var l in tail.Reverse())
             {
                 try
                 {
