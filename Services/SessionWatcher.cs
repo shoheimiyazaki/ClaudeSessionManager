@@ -82,12 +82,20 @@ public sealed class SessionWatcher : IDisposable
                     : DateTime.Now;
 
                 bool alive = IsAlive(data.Pid);
+
+                // dead かつ起動から24時間以上経過した古い json は、プロセス終了時に
+                // 消えずに残った残骸と見なして無視する(UIのゴミ表示を防ぐ)。
+                if (!alive && (DateTime.Now - startedAt).TotalHours >= 24) return;
+
                 IntPtr hwnd  = alive ? WindowHelper.FindWindowForProcess(data.Pid) : IntPtr.Zero;
                 string title = alive
                     ? WindowHelper.GetEffectiveTitle(hwnd, data.Pid)
                     : string.Empty;
-                var lastActivity = data.SessionId != null
-                    ? GetLastActivity(data.SessionId)
+
+                // sessionId が空文字のときに history.jsonl の誤エントリとマッチして
+                // 無関係なタイムスタンプを拾わないよう、厳密にチェックする。
+                var lastActivity = !string.IsNullOrWhiteSpace(data.SessionId)
+                    ? GetLastActivity(data.SessionId!)
                     : null;
 
                 bool isArchived = _archivedIds.Contains(data.SessionId ?? string.Empty);
@@ -130,7 +138,7 @@ public sealed class SessionWatcher : IDisposable
         };
         _fsWatcher.Created += (_, e) =>
         {
-            Thread.Sleep(300);
+            Thread.Sleep(1000);
             TryAddFromFile(e.FullPath);
         };
         _fsWatcher.Deleted += (_, e) =>

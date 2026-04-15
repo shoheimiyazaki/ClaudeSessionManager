@@ -57,6 +57,22 @@ public class SessionInfo : INotifyPropertyChanged
             if (_windowTitle == value) return;
             _windowTitle = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(SubtitleText));
+        }
+    }
+
+    /// <summary>
+    /// タイトル下に表示する補助情報。
+    /// WindowTitle が信頼できる場合のみ表示、なければ PID を表示して
+    /// 同一プロジェクトの複数セッションを区別できるようにする。
+    /// </summary>
+    public string SubtitleText
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_windowTitle))
+                return _windowTitle;
+            return $"PID {Pid}";
         }
     }
 

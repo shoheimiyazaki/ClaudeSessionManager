@@ -200,7 +200,7 @@
                                                         </Ellipse.Style>
                                                     </Ellipse>
 
-                                                    <!-- プロジェクト名 + ウィンドウタイトル -->
+                                                    <!-- プロジェクト名(常時主表示) + 補助情報(WindowTitle / PID) -->
                                                     <StackPanel Grid.Column="1"
                                                                 Margin="8,0,8,0"
                                                                 VerticalAlignment="Center">
@@ -208,11 +208,11 @@
                                                                    Foreground="#8cff9d"
                                                                    FontSize="16"
                                                                    TextTrimming="CharacterEllipsis"/>
-                                                        <TextBlock Text="{Binding WindowTitle}"
+                                                        <TextBlock Text="{Binding SubtitleText}"
                                                                    Foreground="#a3c8e3"
-                                                                   FontSize="14"
+                                                                   FontSize="12"
                                                                    TextTrimming="CharacterEllipsis"
-                                                                   Visibility="{Binding WindowTitle,
+                                                                   Visibility="{Binding SubtitleText,
                                                                        Converter={StaticResource StringToVisibilityConverter}}"/>
                                                     </StackPanel>
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Management;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Diagnostics;
 
 namespace ClaudeSessionManager.Services;
 
@@ -50,16 +51,6 @@ public static class WindowHelper
     [DllImport("user32.dll")]
     private static extern bool BringWindowToTop(IntPtr hWnd);
 
-    // コンソールタイトル取得用
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool AttachConsole(uint dwProcessId);
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool FreeConsole();
-    [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
-    private static extern uint GetConsoleTitle(StringBuilder lpConsoleTitle, uint nSize);
-
-    private static readonly object ConsoleAttachLock = new();
-
     [DllImport("user32.dll")]
     private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
 
@@ -75,11 +66,6 @@ public static class WindowHelper
     private const int SW_SHOW    = 5;
 
     // ---- 定数 ----
-
-    private static readonly HashSet<string> TerminalNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "WindowsTerminal.exe", "powershell.exe", "pwsh.exe",
-    };
 
     private static readonly HashSet<string> StopNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -172,41 +158,47 @@ public static class WindowHelper
 
     /// <summary>
     /// HWND のタイトルを取得する。
-    /// FindTerminalAncestor が WindowsTerminal を返す場合は FindWindowByPidWithTitle が WT の
-    /// メインウィンドウ HWND を返すため、GetWindowText がアクティブタブタイトルをリアルタイムで返す。
-    /// タイトルが空のウィンドウ（PseudoConsoleWindow など）は AttachConsole 経由にフォールバック。
-    /// WMI クエリを含むため、バックグラウンドスレッドから呼ぶこと。
+    /// WindowsTerminal は 1プロセスで複数タブ/ウィンドウを持ち、
+    /// GetWindowText が「アクティブタブ」のタイトルしか返さないため、
+    /// 同じ WT で動く別セッションのタイトルが混線する。
+    /// そのため WindowsTerminal を親に持つ場合は空を返し、
+    /// UI 側はプロジェクト名を主タイトルとして表示する。
+    /// AttachConsole は他プロセスのコンソールを乗っ取る危険があるため使用しない。
     /// </summary>
     public static string GetEffectiveTitle(IntPtr hWnd, int claudePid)
     {
-        // WT hwnd の場合は GetWindowText がアクティブタブタイトルを返す
+        var (_, termName) = FindTerminalAncestor(claudePid);
+
+        // WindowsTerminal の場合はアクティブタブのタイトルが他セッションに流入するため使わない
+        if (termName.Equals("WindowsTerminal.exe", StringComparison.OrdinalIgnoreCase))
+            return string.Empty;
+
+        // スタンドアロン PowerShell / conhost のタイトルは個別ウィンドウなので信頼できる
         var title = GetWindowTitle(hWnd);
-        if (!string.IsNullOrWhiteSpace(title)) return title;
-
-        // タイトルが空（PseudoConsoleWindow など）→ AttachConsole 経由で取得
-        var (termPid, _) = FindTerminalAncestor(claudePid);
-        if (termPid <= 0) return string.Empty;
-        return GetConsoleTitleForPid(termPid);
+        return IsMeaningfulTitle(title) ? title : string.Empty;
     }
 
-    /// <summary>AttachConsole でコンソールタイトルを取得する（同時実行不可のためロック付き）</summary>
-    private static string GetConsoleTitleForPid(int pid)
+    /// <summary>
+    /// 「Windows PowerShell」「PowerShell」「cmd.exe」などの汎用シェル名タイトルは
+    /// セッション識別に役立たないのでノイズ扱いにする。
+    /// </summary>
+    private static bool IsMeaningfulTitle(string? title)
     {
-        lock (ConsoleAttachLock)
-        {
-            if (!AttachConsole((uint)pid)) return string.Empty;
-            try
-            {
-                var sb = new StringBuilder(512);
-                GetConsoleTitle(sb, (uint)sb.Capacity);
-                return sb.ToString();
-            }
-            finally
-            {
-                FreeConsole();
-            }
-        }
+        if (string.IsNullOrWhiteSpace(title)) return false;
+        var trimmed = title.Trim();
+        if (GenericShellTitles.Contains(trimmed)) return false;
+        return true;
     }
+
+    private static readonly HashSet<string> GenericShellTitles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Windows PowerShell",
+        "PowerShell",
+        "pwsh",
+        "cmd.exe",
+        "Command Prompt",
+        "コマンド プロンプト",
+    };
 
     // ---- private ----
 
@@ -249,24 +241,6 @@ public static class WindowHelper
 
         // WT が見つからなかった → スタンドアロン shell を返す
         return (savedShellPid, savedShellName);
-    }
-
-    /// <summary>指定 PID の子プロセスから conhost.exe / OpenConsole.exe を探す</summary>
-    private static int FindConsoleHostChild(int shellPid)
-    {
-        try
-        {
-            using var searcher = new ManagementObjectSearcher(
-                $"SELECT ProcessId, Name FROM Win32_Process WHERE ParentProcessId = {shellPid}");
-            foreach (ManagementObject obj in searcher.Get())
-            {
-                string name = obj["Name"]?.ToString() ?? string.Empty;
-                if (ConsoleHostNames.Contains(name))
-                    return Convert.ToInt32(obj["ProcessId"]);
-            }
-        }
-        catch { }
-        return -1;
     }
 
     /// <summary>
