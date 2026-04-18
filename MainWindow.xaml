@@ -168,9 +168,7 @@
                                         BorderThickness="0"
                                         Cursor="Hand"
                                         HorizontalContentAlignment="Stretch"
-                                        Command="{Binding DataContext.FocusOrResumeCommand,
-                                                  RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                        CommandParameter="{Binding}">
+                                        Click="SessionItem_Click">
                                     <Button.Template>
                                         <ControlTemplate TargetType="Button">
                                             <Border x:Name="RowBg"
@@ -200,7 +198,7 @@
                                                         </Ellipse.Style>
                                                     </Ellipse>
 
-                                                    <!-- プロジェクト名(常時主表示) + 補助情報(WindowTitle / PID) -->
+                                                    <!-- プロジェクト名(常時主表示) + 補助情報(カスタムタイトル / 履歴先頭メッセージ / WindowTitle) -->
                                                     <StackPanel Grid.Column="1"
                                                                 Margin="8,0,8,0"
                                                                 VerticalAlignment="Center">
@@ -208,12 +206,54 @@
                                                                    Foreground="#8cff9d"
                                                                    FontSize="16"
                                                                    TextTrimming="CharacterEllipsis"/>
+
+                                                        <!-- 通常表示: SubtitleText -->
                                                         <TextBlock Text="{Binding SubtitleText}"
                                                                    Foreground="#a3c8e3"
                                                                    FontSize="12"
                                                                    TextTrimming="CharacterEllipsis"
-                                                                   Visibility="{Binding SubtitleText,
-                                                                       Converter={StaticResource StringToVisibilityConverter}}"/>
+                                                                   ToolTip="{Binding SubtitleText}">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                    <Style.Triggers>
+                                                                        <!-- 編集中は TextBox と入れ替え -->
+                                                                        <DataTrigger Binding="{Binding IsEditingTitle}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        </DataTrigger>
+                                                                        <!-- サブタイトルが空なら非表示 -->
+                                                                        <DataTrigger Binding="{Binding SubtitleText}" Value="">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+
+                                                        <!-- 編集中: カスタムタイトル入力 TextBox -->
+                                                        <TextBox Text="{Binding CustomTitle, UpdateSourceTrigger=PropertyChanged}"
+                                                                 Foreground="#CDD6F4"
+                                                                 Background="#313244"
+                                                                 BorderBrush="#CBA6F7"
+                                                                 BorderThickness="1"
+                                                                 CaretBrush="#CDD6F4"
+                                                                 SelectionBrush="#CBA6F7"
+                                                                 FontSize="12"
+                                                                 Padding="2,1"
+                                                                 KeyDown="RenameBox_KeyDown"
+                                                                 LostFocus="RenameBox_LostFocus"
+                                                                 IsVisibleChanged="RenameBox_IsVisibleChanged">
+                                                            <TextBox.Style>
+                                                                <Style TargetType="TextBox">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsEditingTitle}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBox.Style>
+                                                        </TextBox>
                                                     </StackPanel>
 
                                                     <!-- 右側: 経過時間 + 最終メッセージ -->

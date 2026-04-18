@@ -12,6 +12,9 @@ public class SessionInfo : INotifyPropertyChanged
     private IntPtr _windowHandle;
     private DateTime? _lastActivity;
     private bool _isArchived;
+    private string? _customTitle;
+    private string? _firstMessage;
+    private bool _isEditingTitle;
 
     public int Pid { get; init; }
     public string SessionId { get; init; } = string.Empty;
@@ -62,18 +65,72 @@ public class SessionInfo : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// ユーザーがリネームで設定したカスタムタイトル。最優先で表示される。
+    /// </summary>
+    public string? CustomTitle
+    {
+        get => _customTitle;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (_customTitle == normalized) return;
+            _customTitle = normalized;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SubtitleText));
+        }
+    }
+
+    /// <summary>
+    /// history.jsonl から取得した最初のユーザーメッセージ。セッション内容のヒントとして表示する。
+    /// </summary>
+    public string? FirstMessage
+    {
+        get => _firstMessage;
+        set
+        {
+            if (_firstMessage == value) return;
+            _firstMessage = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SubtitleText));
+        }
+    }
+
+    /// <summary>UI で現在リネーム編集中かどうか。</summary>
+    public bool IsEditingTitle
+    {
+        get => _isEditingTitle;
+        set
+        {
+            if (_isEditingTitle == value) return;
+            _isEditingTitle = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
     /// タイトル下に表示する補助情報。
-    /// WindowTitle が信頼できる場合のみ表示、なければ PID を表示して
-    /// 同一プロジェクトの複数セッションを区別できるようにする。
+    /// 優先順位: CustomTitle(ユーザー指定) → FirstMessage(履歴の最初のプロンプト) → WindowTitle → 空。
+    /// PID は冗長なので表示しない(識別用途は ProjectName と FirstMessage で十分)。
     /// </summary>
     public string SubtitleText
     {
         get
         {
+            if (!string.IsNullOrWhiteSpace(_customTitle))
+                return _customTitle!;
+            if (!string.IsNullOrWhiteSpace(_firstMessage))
+                return TruncateSingleLine(_firstMessage!, 80);
             if (!string.IsNullOrWhiteSpace(_windowTitle))
                 return _windowTitle;
-            return $"PID {Pid}";
+            return string.Empty;
         }
+    }
+
+    private static string TruncateSingleLine(string s, int max)
+    {
+        var single = s.Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ").Trim();
+        if (single.Length <= max) return single;
+        return single.Substring(0, max) + "…";
     }
 
     public IntPtr WindowHandle
@@ -100,8 +157,11 @@ public class SessionInfo : INotifyPropertyChanged
         }
     }
 
-    /// <summary>ソートキー。LastActivity が null の場合は最下位（DateTime.MinValue）</summary>
-    public DateTime SortKey => LastActivity ?? DateTime.MinValue;
+    /// <summary>ソートキー。LastActivity が null の場合は StartedAt を使う。</summary>
+    public DateTime SortKey => LastActivity ?? StartedAt;
+
+    /// <summary>アーカイブ判定の基準となる「最後の活動時刻」。履歴がなければ StartedAt。</summary>
+    public DateTime ReferenceTime => LastActivity ?? StartedAt;
 
     public string LastActivityText
     {
