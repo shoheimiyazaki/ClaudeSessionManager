@@ -24,6 +24,7 @@ public sealed class SessionWatcher : IDisposable
 
     private readonly object _lock = new();
     private readonly Dictionary<int, SessionInfo> _byPid = new();
+    private readonly Dictionary<string, int> _pidByFilePath = new(StringComparer.OrdinalIgnoreCase);
 
     public ObservableCollection<SessionInfo> Sessions { get; } = new();
 
@@ -88,6 +89,7 @@ public sealed class SessionWatcher : IDisposable
                     SessionId    = data.SessionId ?? string.Empty,
                     ProjectPath  = data.Cwd ?? string.Empty,
                     StartedAt    = startedAt,
+                    SourceFilePath = filePath,
                     IsAlive      = alive,
                     WindowHandle = hwnd,
                     WindowTitle  = title,
@@ -98,6 +100,7 @@ public sealed class SessionWatcher : IDisposable
                 {
                     if (_byPid.ContainsKey(data.Pid)) return;
                     _byPid[data.Pid] = session;
+                    _pidByFilePath[filePath] = data.Pid;
                 }
 
                 Application.Current.Dispatcher.BeginInvoke(() => Sessions.Add(session));
@@ -117,16 +120,9 @@ public sealed class SessionWatcher : IDisposable
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
             EnableRaisingEvents = true,
         };
-        _fsWatcher.Created += (_, e) =>
-        {
-            Thread.Sleep(300);
-            TryAddFromFile(e.FullPath);
-        };
-        _fsWatcher.Deleted += (_, e) =>
-        {
-            if (int.TryParse(Path.GetFileNameWithoutExtension(e.Name), out int pid))
-                MarkDead(pid);
-        };
+        _fsWatcher.Created += (_, e) => ScheduleAdd(e.FullPath);
+        _fsWatcher.Changed += (_, e) => ScheduleAdd(e.FullPath);
+        _fsWatcher.Deleted += (_, e) => RemoveSession(e.FullPath);
     }
 
     // ---- 定期リフレッシュ ----
@@ -212,13 +208,20 @@ public sealed class SessionWatcher : IDisposable
         return null;
     }
 
-    private void MarkDead(int pid)
+    private void RemoveSession(string filePath)
     {
+        SessionInfo? session = null;
+
         lock (_lock)
         {
-            if (!_byPid.TryGetValue(pid, out var session)) return;
-            Application.Current.Dispatcher.BeginInvoke(() => session.IsAlive = false);
+            if (!_pidByFilePath.TryGetValue(filePath, out var pid)) return;
+            _pidByFilePath.Remove(filePath);
+            if (_byPid.TryGetValue(pid, out session))
+                _byPid.Remove(pid);
         }
+
+        if (session != null)
+            Application.Current.Dispatcher.BeginInvoke(() => Sessions.Remove(session));
     }
 
     private static bool IsAlive(int pid)
@@ -234,6 +237,15 @@ public sealed class SessionWatcher : IDisposable
         _fsWatcher?.Dispose();
         _refreshTimer?.Dispose();
         _elapsedTimer?.Dispose();
+    }
+
+    private void ScheduleAdd(string filePath)
+    {
+        Task.Run(() =>
+        {
+            Thread.Sleep(300);
+            TryAddFromFile(filePath);
+        });
     }
 
     // ---- JSON レコード ----

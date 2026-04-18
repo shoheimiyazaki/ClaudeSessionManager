@@ -23,6 +23,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         Loaded          += OnLoaded;
         ContentRendered += OnContentRendered;
+        Closed          += OnClosed;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -59,5 +60,11 @@ public partial class MainWindow : Window
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
         Application.Current.Shutdown();
+    }
+
+    private void OnClosed(object? sender, EventArgs e)
+    {
+        if (DataContext is IDisposable disposable)
+            disposable.Dispose();
     }
 }

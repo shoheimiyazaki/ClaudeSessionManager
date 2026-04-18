@@ -16,6 +16,7 @@ public class SessionInfo : INotifyPropertyChanged
     public string SessionId { get; init; } = string.Empty;
     public string ProjectPath { get; init; } = string.Empty;
     public DateTime StartedAt { get; init; }
+    public string SourceFilePath { get; init; } = string.Empty;
 
     public string ProjectName
     {
@@ -40,7 +41,7 @@ public class SessionInfo : INotifyPropertyChanged
         }
     }
 
-    public string StatusLabel => _isAlive ? "実行中" : "終了";
+    public string StatusLabel => _isAlive ? "Running" : "Closed";
 
     public string WindowTitle
     {
@@ -64,7 +65,6 @@ public class SessionInfo : INotifyPropertyChanged
         }
     }
 
-    /// <summary>最後のユーザーメッセージ時刻</summary>
     public DateTime? LastActivity
     {
         get => _lastActivity;
@@ -77,24 +77,23 @@ public class SessionInfo : INotifyPropertyChanged
         }
     }
 
-    /// <summary>最後のメッセージからの経過時間表示（例: 5m前 / 2h前）</summary>
     public string LastActivityText
     {
         get
         {
             if (_lastActivity == null) return string.Empty;
+
             var elapsed = DateTime.Now - _lastActivity.Value;
             if (elapsed.TotalDays >= 1)
-                return $"{(int)elapsed.TotalDays}d前";
+                return $"{(int)elapsed.TotalDays}d ago";
             if (elapsed.TotalHours >= 1)
-                return $"{(int)elapsed.TotalHours}h{elapsed.Minutes:D2}m前";
+                return $"{(int)elapsed.TotalHours}h{elapsed.Minutes:D2}m ago";
             if (elapsed.TotalMinutes >= 1)
-                return $"{(int)elapsed.TotalMinutes}m前";
-            return "今";
+                return $"{(int)elapsed.TotalMinutes}m ago";
+            return "now";
         }
     }
 
-    /// <summary>起動からの経過時間（例: 1h05m / 23m）</summary>
     public string ElapsedTime
     {
         get
@@ -104,7 +103,7 @@ public class SessionInfo : INotifyPropertyChanged
                 return $"{(int)elapsed.TotalHours}h{elapsed.Minutes:D2}m";
             if (elapsed.TotalMinutes >= 1)
                 return $"{(int)elapsed.TotalMinutes}m";
-            return "今";
+            return "now";
         }
     }
 
